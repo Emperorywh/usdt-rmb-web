@@ -381,18 +381,17 @@ function App() {
   }, [loadLatest, loadHistory])
 
 
-  /** 手动触发一次新分析（POST /signal/refresh），完成后刷新视图 */
+  /** 手动刷新视图（仅拉取最新数据，不触发 LLM 新分析） */
   const handleRefresh = useCallback(async () => {
     setRefreshing(true)
     try {
-      await apiPost(`/signal/refresh?symbol=${encodeURIComponent(symbol)}`)
       await Promise.all([loadLatest(), loadHistory()])
     } catch (e) {
       setError((e as Error).message)
     } finally {
       setRefreshing(false)
     }
-  }, [symbol, loadLatest, loadHistory])
+  }, [loadLatest, loadHistory])
 
   /** 点击历史时间轴某条 → 拉取详情（带思维链 + 完整因子） */
   const handleSelectHistory = useCallback(async (id: number) => {
