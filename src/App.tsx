@@ -3,8 +3,11 @@ import {
   useEffect,
   useMemo,
   useState,
+  useRef,
   type ReactNode,
 } from 'react'
+
+import { useVirtualizer } from '@tanstack/react-virtual'
 
 // =====================================================================
 // ALPHA · ETH 量化分析工作台（轻量分析工具版）
@@ -301,17 +304,6 @@ async function apiGet<T>(path: string): Promise<T> {
   return (await r.json()) as T
 }
 
-async function apiPost<T>(path: string): Promise<T> {
-  const r = await fetch(`${API_BASE}${path}`, {
-    method: 'POST',
-    headers: { Accept: 'application/json' },
-  })
-  if (!r.ok) {
-    const text = await r.text().catch(() => '')
-    throw new Error(`${r.status} ${r.statusText} ${text}`.trim())
-  }
-  return (await r.json()) as T
-}
 
 // =====================================================================
 // 顶层容器 App
@@ -329,6 +321,8 @@ function App() {
   const [current, setCurrent] = useState<AnalysisFull | null>(null)
   /** 历史时间轴条目 */
   const [history, setHistory] = useState<AnalysisFull[]>([])
+  /** 历史时间轴加载中 */
+  const [historyLoading, setHistoryLoading] = useState<boolean>(false)
   /** 首屏加载中（current 还没拿到时显示骨架屏） */
   const [loading, setLoading] = useState<boolean>(true)
   /** 是否正在执行手动刷新（POST /signal/refresh 进行中） */
@@ -356,22 +350,28 @@ function App() {
     }
   }, [symbol])
 
-  /** 拉取历史时间轴（最近 20 条） */
+  /** 拉取历史时间轴（最近 100 条） */
   const loadHistory = useCallback(async () => {
+    setHistoryLoading(true)
     try {
       const data = await apiGet<HistoryResponse>(
-        `/analysis/history?symbol=${encodeURIComponent(symbol)}&limit=20`,
+        `/analysis/history?symbol=${encodeURIComponent(symbol)}&limit=100`,
       )
       setHistory(data.items)
     } catch (e) {
       setError((e as Error).message)
+    } finally {
+      setHistoryLoading(false)
     }
   }, [symbol])
 
   /** 首屏：并行拉 latest + history */
   useEffect(() => {
     let alive = true
-    setLoading(true)
+    // 将 setLoading 放入微任务队列或直接依靠外层状态管理
+    Promise.resolve().then(() => {
+      if (alive) setLoading(true)
+    })
     Promise.all([loadLatest(), loadHistory()]).finally(() => {
       if (alive) setLoading(false)
     })
@@ -478,6 +478,7 @@ function App() {
                 items={history}
                 activeId={activeId}
                 onSelect={handleSelectHistory}
+                loading={historyLoading}
               />
             </div>
 
@@ -1376,10 +1377,10 @@ function TimeframeStrip({ data }: { data: TimeframeAlignmentItem[] }) {
               <Tooltip
                 key={tf.timeframe}
                 content={tfDescriptions[tf.timeframe] ?? '该周期方向投票'}
-                className="block"
+                className="w-full h-full"
               >
                 <div
-                  className={`group flex h-full cursor-help flex-col gap-2 rounded-xl border p-4 transition hover:-translate-y-[1px] hover:shadow-card ${palette.border} ${palette.bgSoft}`}
+                  className={`group flex h-full w-full cursor-help flex-col gap-2 rounded-xl border p-4 transition hover:-translate-y-[1px] hover:shadow-card ${palette.border} ${palette.bgSoft}`}
                 >
                   <div className="flex items-center justify-between">
                     <span className="font-mono text-[11px] font-semibold uppercase tracking-wide text-ink-2">
@@ -2271,11 +2272,20 @@ function HistoryList({
   items,
   activeId,
   onSelect,
+  loading,
 }: {
   items: AnalysisFull[]
   activeId: number | null
   onSelect: (id: number) => void
+  loading?: boolean
 }) {
+  const parentRef = useRef<HTMLDivElement>(null)
+  const rowVirtualizer = useVirtualizer({
+    count: items.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 140, // 估计卡片加上间距的高度
+  })
+
   return (
     <Card
       eyebrow="HISTORY"
@@ -2286,73 +2296,109 @@ function HistoryList({
           最近 {items.length} 条
         </Badge>
       }
-      className="flex flex-col lg:sticky lg:top-20 lg:max-h-[calc(100vh-100px)]"
+      className="flex flex-col lg:sticky lg:top-20 lg:h-[calc(100vh-100px)]"
       delay={0.46}
     >
-      <div className="-mx-2 mt-4 flex-1 overflow-y-auto px-2">
-        <div className="flex flex-col gap-3 pb-2">
-          {items.length === 0 && (
-            <div className="py-6 text-center text-sm text-muted">暂无历史。</div>
-          )}
-          {items.map((it) => {
-            const palette = biasPalette(it.summary.bias_color)
-            const tone: Tone =
-              it.summary.bias_color === 'success'
-                ? 'long'
-                : it.summary.bias_color === 'error'
-                  ? 'short'
-                  : 'neutral'
-            const active = it.signal_id === activeId
-            const pnl = it.summary.pnl_pct
-            return (
-              <button
-                key={it.signal_id ?? Math.random()}
-                onClick={() => it.signal_id && onSelect(it.signal_id)}
-                className={`group relative flex w-full flex-col items-stretch gap-3 rounded-xl border bg-surface p-4 text-left transition hover:-translate-y-[1px] hover:shadow-card-hover ${
-                  active
-                    ? 'border-accent ring-2 ring-accent-soft'
-                    : 'border-hairline hover:border-hairline-strong'
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`inline-block h-2 w-2 rounded-full ${palette.bar}`}
-                    />
-                    <span className="font-mono text-[11px] text-muted">
-                      {fmtLocalTime(it.ts)}
-                    </span>
+      <div ref={parentRef} className="-mx-2 mt-4 flex-1 overflow-y-auto px-2">
+        {loading ? (
+          <div className="space-y-4 px-2">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <Skeleton key={i} className="h-28 w-full rounded-xl" />
+            ))}
+          </div>
+        ) : items.length === 0 ? (
+          <div className="py-6 text-center text-sm text-muted">暂无历史。</div>
+        ) : (
+          <div
+            className="relative"
+            style={{
+              height: `${rowVirtualizer.getTotalSize()}px`,
+              width: '100%',
+            }}
+          >
+            {rowVirtualizer.getVirtualItems().map((virtualItem) => {
+              const it = items[virtualItem.index]
+              const palette = biasPalette(it.summary.bias_color)
+              const tone: Tone =
+                it.summary.bias_color === 'success'
+                  ? 'long'
+                  : it.summary.bias_color === 'error'
+                    ? 'short'
+                    : 'neutral'
+              const active = it.signal_id === activeId
+              const pnl = it.summary.pnl_pct
+              
+              const isLast = virtualItem.index === items.length - 1
+
+              return (
+                <div
+                  key={virtualItem.key}
+                  data-index={virtualItem.index}
+                  ref={rowVirtualizer.measureElement}
+                  className="absolute top-0 left-0 w-full pb-4"
+                  style={{
+                    transform: `translateY(${virtualItem.start}px)`,
+                  }}
+                >
+                  <div className="flex w-full items-stretch">
+                    {/* 时间轴左侧 */}
+                    <div className="relative flex flex-col items-center w-[36px] pt-1">
+                      {!isLast && (
+                        <div className="absolute top-[14px] bottom-[-16px] left-[17px] w-px bg-hairline" />
+                      )}
+                      <div className={`relative z-10 w-2 h-2 rounded-full ${palette.bar} ${active ? 'ring-4 ring-accent-soft' : ''}`} />
+                    </div>
+                    
+                    {/* 卡片内容 */}
+                    <div className="flex-1 min-w-0 pr-2">
+                      <div className="mb-1.5 ml-1">
+                        <span className="font-mono text-[11px] text-muted">
+                          {fmtLocalTime(it.ts)}
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => it.signal_id && onSelect(it.signal_id)}
+                        className={`group relative flex w-full flex-col items-stretch gap-2.5 rounded-xl border bg-surface p-3.5 text-left transition hover:-translate-y-[1px] hover:shadow-card-hover ${
+                          active
+                            ? 'border-accent ring-2 ring-accent-soft'
+                            : 'border-hairline hover:border-hairline-strong'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className={`text-lg font-bold ${palette.text}`}>
+                            {it.summary.bias_label}
+                          </div>
+                          <Badge tone={tone} variant="soft" size="xs">
+                            {it.summary.lifecycle_status_label}
+                          </Badge>
+                        </div>
+                        <div className="flex items-end justify-between">
+                          <div className="font-mono text-[13px] font-medium tabular text-ink">
+                            ${fmtPrice(it.summary.current_price)}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Badge tone="muted" variant="outline" size="xs">
+                              RR {fmtNum(it.summary.risk_reward_ratio ?? null, 2)}
+                            </Badge>
+                            <Badge
+                              tone={
+                                (pnl ?? 0) > 0 ? 'long' : (pnl ?? 0) < 0 ? 'short' : 'muted'
+                              }
+                              variant="soft"
+                              size="xs"
+                            >
+                              PnL {fmtPct(pnl, 1)}
+                            </Badge>
+                          </div>
+                        </div>
+                      </button>
+                    </div>
                   </div>
-                  <Badge tone={tone} variant="soft" size="xs">
-                    {it.summary.lifecycle_status_label}
-                  </Badge>
                 </div>
-                <div className="flex items-end justify-between">
-                  <div className={`text-xl font-bold ${palette.text}`}>
-                    {it.summary.bias_label}
-                  </div>
-                  <div className="font-mono text-[13px] font-medium tabular text-ink">
-                    ${fmtPrice(it.summary.current_price)}
-                  </div>
-                </div>
-                <div className="flex items-center justify-between">
-                  <Badge tone="muted" variant="outline" size="xs">
-                    RR {fmtNum(it.summary.risk_reward_ratio ?? null, 2)}
-                  </Badge>
-                  <Badge
-                    tone={
-                      (pnl ?? 0) > 0 ? 'long' : (pnl ?? 0) < 0 ? 'short' : 'muted'
-                    }
-                    variant="soft"
-                    size="xs"
-                  >
-                    PnL {fmtPct(pnl, 1)}
-                  </Badge>
-                </div>
-              </button>
-            )
-          })}
-        </div>
+              )
+            })}
+          </div>
+        )}
       </div>
     </Card>
   )
