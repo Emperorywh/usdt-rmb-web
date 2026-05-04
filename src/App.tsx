@@ -926,10 +926,10 @@ function BrandMark() {
       </div>
       <div className="leading-tight">
         <div className="text-sm font-semibold tracking-tight text-ink">
-          Alpha<span className="text-accent">.</span>ETH
+          Emperor<span className="text-accent">.</span>ETH
         </div>
         <div className="text-[10px] font-medium uppercase tracking-wider text-muted">
-          Analytics
+          量化交易分析：7X24H
         </div>
       </div>
     </div>
@@ -2528,9 +2528,9 @@ function Footer() {
   return (
     <footer className="border-t border-hairline bg-surface">
       <div className="mx-auto flex max-w-[1536px] flex-wrap items-center justify-between gap-3 px-4 py-6 text-[11px] text-muted sm:px-6 lg:px-10">
-        <div>Alpha · ETH 量化分析工作台 · 仅供参考，不构成投资建议</div>
+        <div>Emperor_ · ETH 量化分析工作台 · 仅供参考，不构成投资建议</div>
         <div className="font-mono">
-          Rule Engine + DeepSeek-V4 · Multi-Timeframe Resonance
+          YangWenHua + DeepSeek-V4
         </div>
       </div>
     </footer>
