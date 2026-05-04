@@ -447,35 +447,28 @@ function App() {
               {/* 1️⃣ 顶部决策核心（大判词 + 关键指标 + 置信度） */}
               <DecisionHero data={current} />
 
+              {/* 4️⃣ Narrative 三段式（提上来，紧跟信号） */}
+              <NarrativeCards decision={current.decision} />
+
               {/* 2️⃣ 多周期信号（横向 tabs） */}
               <TimeframeStrip data={current.timeframe_alignment} />
 
-              {/* 3️⃣ 二级网格：交易计划 + 生命周期 + 因子归因 + 流动性/MTF */}
-              <div className="grid grid-cols-12 gap-6">
-                <div className="col-span-12 xl:col-span-7">
+              {/* 3️⃣ 二级网格：左右分栏（瀑布流），避免不同高度卡片造成的网格断层 */}
+              <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
+                <div className="flex flex-col gap-6 xl:col-span-7">
                   <TradingPlanCard data={current} />
+                  <AttributionList data={current.rule_engine} />
                 </div>
-                <div className="col-span-12 xl:col-span-5">
+                <div className="flex flex-col gap-6 xl:col-span-5">
                   <LifecyclePanel
                     data={current.lifecycle}
                     bias={current.decision.bias}
                   />
-                </div>
-
-                <div className="col-span-12 xl:col-span-7">
-                  <AttributionList data={current.rule_engine} />
-                </div>
-                <div className="col-span-12 xl:col-span-5">
                   <MarketContextCard
                     liquidity={current.market_context.liquidity}
                     mtf={current.market_context.mtf_alignment}
                     regime={current.market_context.regime}
                   />
-                </div>
-
-                {/* 4️⃣ Narrative 三段式 */}
-                <div className="col-span-12">
-                  <NarrativeCards decision={current.decision} />
                 </div>
               </div>
             </div>
@@ -888,6 +881,34 @@ function Header({
             </span>
           </div>
         </div>
+        
+        {/* 右：刷新按钮 */}
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={onRefresh}
+            disabled={refreshing}
+            className={`inline-flex items-center gap-1.5 rounded-lg border border-hairline bg-surface px-3 py-1.5 text-xs font-medium text-ink transition hover:border-hairline-strong hover:bg-bg-2 disabled:cursor-not-allowed disabled:opacity-50`}
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 14 14"
+              fill="none"
+              className={refreshing ? 'animate-spin' : ''}
+              aria-hidden
+            >
+              <path
+                d="M11.5 7a4.5 4.5 0 1 1-1.3-3.2l1.3 1.2m0-3.5v3.5h-3.5"
+                stroke="currentColor"
+                strokeWidth="1.4"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+            刷新
+          </button>
+        </div>
       </div>
     </header>
   )
@@ -984,17 +1005,41 @@ function SkeletonHero() {
             </div>
           </div>
         </div>
-        <div className="grid grid-cols-12 gap-6">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div
-              key={i}
-              className="col-span-12 rounded-2xl border border-hairline bg-surface p-6 shadow-card xl:col-span-6"
-            >
-              <Skeleton className="h-3 w-20" />
-              <Skeleton className="mt-3 h-6 w-40" />
-              <Skeleton className="mt-6 h-32 w-full" />
+        
+        {/* Narrative 三段式 skeleton */}
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="rounded-2xl border border-hairline bg-surface p-5 shadow-card">
+              <div className="flex items-center gap-2">
+                <Skeleton className="h-7 w-7 rounded-lg" />
+                <Skeleton className="h-3 w-16" />
+              </div>
+              <Skeleton className="mt-3 h-5 w-24" />
+              <Skeleton className="mt-3 h-16 w-full" />
             </div>
           ))}
+        </div>
+        
+        {/* 多周期 Tabs skeleton */}
+        <div className="rounded-2xl border border-hairline bg-surface p-6 shadow-card">
+          <Skeleton className="h-3 w-32" />
+          <Skeleton className="mt-4 h-8 w-full max-w-md" />
+          <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <Skeleton key={i} className="h-24 w-full rounded-xl" />
+            ))}
+          </div>
+        </div>
+        
+        <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
+          <div className="flex flex-col gap-6 xl:col-span-7">
+            <Skeleton className="h-[280px] w-full rounded-2xl" />
+            <Skeleton className="h-[400px] w-full rounded-2xl" />
+          </div>
+          <div className="flex flex-col gap-6 xl:col-span-5">
+            <Skeleton className="h-[320px] w-full rounded-2xl" />
+            <Skeleton className="h-[240px] w-full rounded-2xl" />
+          </div>
         </div>
       </div>
       <div className="w-full shrink-0 lg:w-[320px] xl:w-[380px]">
