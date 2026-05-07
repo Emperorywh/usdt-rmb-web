@@ -8,6 +8,8 @@ import {
 } from 'react'
 
 import { useVirtualizer } from '@tanstack/react-virtual'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 
 // =====================================================================
 // ALPHA · ETH 量化分析工作台（轻量分析工具版）
@@ -694,19 +696,27 @@ function Stat({
  * ProgressBar：水平进度条（也用作置信度仪表）
  * - tone 控制颜色
  * - showLabel 在右侧显示百分比
+ * 
+ * 此组件用于展示进度，支持显示文本标签
  */
 function ProgressBar({
   value,
   tone = 'accent',
   className = '',
   height = 'h-2',
+  showLabel = false,
 }: {
   /** 0-100 */
   value: number
   tone?: Tone
   className?: string
   height?: string
+  showLabel?: boolean
 }) {
+  /**
+   * 颜色映射字典
+   * 用于将传入的 tone 映射为 Tailwind 背景色
+   */
   const colorMap: Record<Tone, string> = {
     long: 'bg-long',
     short: 'bg-short',
@@ -714,7 +724,31 @@ function ProgressBar({
     accent: 'bg-accent',
     muted: 'bg-muted',
   }
+  
+  /**
+   * 限制在 0-100 范围内的百分比数值
+   * 避免由于异常数据导致进度条溢出
+   */
   const v = Math.min(100, Math.max(0, value))
+  
+  if (showLabel) {
+    return (
+      <div className={`flex items-center gap-2 ${className}`}>
+        <div
+          className={`relative flex-1 overflow-hidden rounded-full bg-bg-2 ${height}`}
+        >
+          <div
+            className={`absolute inset-y-0 left-0 rounded-full transition-all duration-700 ease-out ${colorMap[tone]}`}
+            style={{ width: `${v}%` }}
+          />
+        </div>
+        <span className="text-[11px] font-mono tabular text-muted shrink-0">
+          {v.toFixed(1)}%
+        </span>
+      </div>
+    )
+  }
+
   return (
     <div
       className={`relative w-full overflow-hidden rounded-full bg-bg-2 ${height} ${className}`}
@@ -1106,11 +1140,25 @@ function EmptyState({ onRefresh }: { onRefresh: () => void }) {
  *   - 左：大号判词（"做多" / "做空" / "观望"）+ headline + chips
  *   - 右：4 个关键指标横排（confidence / RR / position / rule score）
  *   - 下：置信度全宽进度条 + 时间戳 + bias chip
+ *
+ * 此组件用于展示最核心的交易决策信息
  */
 function DecisionHero({ data }: { data: AnalysisFull }) {
+  /**
+   * 解构数据源以方便访问
+   */
   const { decision, summary } = data
+  /**
+   * 根据偏好颜色获取对应的主题样式调色板
+   */
   const palette = biasPalette(decision.bias_color)
+  /**
+   * 获取置信度百分比，默认为 0
+   */
   const conf = decision.confidence_pct ?? 0
+  /**
+   * 将颜色映射为对应的色调类型
+   */
   const tone: Tone =
     decision.bias_color === 'success'
       ? 'long'
@@ -1118,7 +1166,10 @@ function DecisionHero({ data }: { data: AnalysisFull }) {
         ? 'short'
         : 'neutral'
 
-  /** 主判词图标：上箭头 / 下箭头 / 等号 */
+  /** 
+   * 主判词图标：上箭头 / 下箭头 / 等号 
+   * 用于在主标题旁边显示方向标识
+   */
   const directionIcon = (
     <svg width="36" height="36" viewBox="0 0 36 36" fill="none" aria-hidden>
       {decision.bias_color === 'success' && (
@@ -1204,7 +1255,7 @@ function DecisionHero({ data }: { data: AnalysisFull }) {
 
         {/* 右：四象限指标 */}
         <div className="col-span-12 lg:col-span-5">
-          <div className="grid grid-cols-2 gap-x-6 gap-y-5">
+          <div className="grid grid-cols-1 gap-x-6 gap-y-5 sm:grid-cols-2">
             <Stat
               label="置信度"
               value={`${fmtNum(conf, 1)}%`}
@@ -1448,8 +1499,14 @@ function TabButton({
  * - 三个关键指标横排：入场区间 / 止损 / 仓位与RR
  * - 价格刻度尺（visualization）：把 SL · entry · TP · LAST 标注在同一条轴上
  * - TP 列表：每个 TP 一个小卡片（价格 + 收益率）
+ *
+ * 此组件用于展示当前的交易计划数据
  */
 function TradingPlanCard({ data }: { data: AnalysisFull }) {
+  /**
+   * 从数据中提取交易计划、决策和汇总信息
+   * 便于后续快速访问各个字段
+   */
   const { trading_plan: plan, decision, summary } = data
   const entry = plan.entry_zone
   const tps = plan.take_profit
@@ -1487,7 +1544,10 @@ function TradingPlanCard({ data }: { data: AnalysisFull }) {
     )
   }
 
-  // 用 entry / stop / tp / last 的最小 / 最大价格确定刻度尺范围
+  /**
+   * 收集所有相关的价格点
+   * 用 entry / stop / tp / last 的最小 / 最大价格确定刻度尺范围
+   */
   const allPrices = [
     entry.low,
     entry.high,
@@ -1509,12 +1569,12 @@ function TradingPlanCard({ data }: { data: AnalysisFull }) {
       delay={0.18}
     >
       {/* 三段关键参数 */}
-      <div className="grid grid-cols-3 gap-3 sm:gap-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
         <div className="rounded-xl border border-hairline bg-surface-2 p-3.5">
           <div className="text-[11px] font-medium uppercase tracking-wider text-muted">
             入场区间
           </div>
-          <div className="mt-1.5 font-display text-base font-semibold tabular text-ink sm:text-lg">
+          <div className="mt-1.5 font-display text-base font-semibold tabular text-ink sm:text-lg break-words">
             ${fmtPrice(entry.low)}
             <span className="mx-1 text-muted">→</span>${fmtPrice(entry.high)}
           </div>
@@ -1527,10 +1587,10 @@ function TradingPlanCard({ data }: { data: AnalysisFull }) {
           <div className="text-[11px] font-medium uppercase tracking-wider text-muted">
             止损
           </div>
-          <div className="mt-1.5 font-display text-base font-semibold tabular text-short sm:text-lg">
+          <div className="mt-1.5 font-display text-base font-semibold tabular text-short sm:text-lg break-words">
             ${fmtPrice(plan.stop_loss)}
           </div>
-          <div className="mt-1 text-[11px] text-muted">
+          <div className="mt-1 text-[11px] text-muted break-words">
             风险 {fmtPct(plan.stop_loss_pct, 2)}
           </div>
         </div>
@@ -1538,12 +1598,12 @@ function TradingPlanCard({ data }: { data: AnalysisFull }) {
           <div className="text-[11px] font-medium uppercase tracking-wider text-muted">
             仓位 · RR
           </div>
-          <div className="mt-1.5 font-display text-base font-semibold tabular text-ink sm:text-lg">
+          <div className="mt-1.5 font-display text-base font-semibold tabular text-ink sm:text-lg break-words">
             {plan.position_size_label ?? '—'}
             <span className="mx-1.5 text-muted-2">·</span>
             <span>{fmtNum(plan.risk_reward_ratio ?? null, 2)}</span>
           </div>
-          <div className="mt-1 text-[11px] text-muted">
+          <div className="mt-1 text-[11px] text-muted break-words">
             占资 · 风险收益比
           </div>
         </div>
@@ -1926,7 +1986,7 @@ function AttributionList({ data }: { data: AnalysisFull['rule_engine'] }) {
               key={it.key}
               className="group grid grid-cols-12 items-center gap-3 py-2.5"
             >
-              <div className="col-span-4 flex items-center gap-2 truncate sm:col-span-3">
+              <div className="col-span-4 flex items-center gap-2 break-words sm:col-span-3 flex-wrap">
                 <Badge tone="muted" variant="outline" size="xs">
                   {it.timeframe || '—'}
                 </Badge>
@@ -1936,7 +1996,7 @@ function AttributionList({ data }: { data: AnalysisFull['rule_engine'] }) {
                   </Badge>
                 )}
               </div>
-              <div className="col-span-5 truncate text-sm font-medium text-ink sm:col-span-5">
+              <div className="col-span-5 break-words text-sm font-medium text-ink sm:col-span-5">
                 <Tooltip
                   content={`贡献 ${it.contribution >= 0 ? '+' : ''}${it.contribution.toFixed(4)}`}
                 >
@@ -2107,7 +2167,7 @@ function MarketContextCard({
           <div className="text-[11px] font-medium uppercase tracking-wider text-muted">
             市场状态
           </div>
-          <div className="mt-1 truncate text-base font-semibold text-ink">
+          <div className="mt-1 break-words text-base font-semibold text-ink">
             {regime ?? '—'}
           </div>
           <div className="mt-3 flex items-center gap-1.5">
@@ -2201,6 +2261,92 @@ function NarrativeCards({
   )
 }
 
+/**
+ * 渲染 Markdown 文本的组件
+ * 使用 react-markdown 和 remark-gfm，并提供基础的表格与列表样式
+ * @param content - 需要渲染的 Markdown 字符串
+ */
+function MarkdownRenderer({ content }: { content: string }) {
+  return (
+    <div className="markdown-body text-[13.5px] leading-[1.7] text-ink-2">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          /**
+           * 渲染表格外层容器，增加横向滚动与边框
+           */
+          table: ({ node, ...props }: any) => (
+            <div className="my-4 w-full overflow-x-auto rounded-xl border border-hairline shadow-sm">
+              <table className="min-w-full border-collapse text-left text-[12px] sm:text-[13px]" {...props} />
+            </div>
+          ),
+          /**
+           * 渲染表头单元格
+           */
+          th: ({ node, ...props }: any) => (
+            <th className="border-b border-hairline bg-surface-2 px-4 py-2.5 font-semibold text-ink whitespace-nowrap" {...props} />
+          ),
+          /**
+           * 渲染表格数据单元格，增加 hover 变色效果
+           */
+          td: ({ node, ...props }: any) => (
+            <td className="border-b border-hairline px-4 py-2.5 text-ink-2 whitespace-nowrap transition-colors hover:bg-bg-2/50" {...props} />
+          ),
+          /**
+           * 渲染段落
+           */
+          p: ({ node, ...props }: any) => <p className="mb-3 leading-[1.75] last:mb-0" {...props} />,
+          /**
+           * 渲染无序列表
+           */
+          ul: ({ node, ...props }: any) => <ul className="mb-3 list-outside list-disc pl-5 space-y-1.5 last:mb-0" {...props} />,
+          /**
+           * 渲染有序列表
+           */
+          ol: ({ node, ...props }: any) => <ol className="mb-3 list-outside list-decimal pl-5 space-y-1.5 last:mb-0" {...props} />,
+          /**
+           * 渲染列表项
+           */
+          li: ({ node, ...props }: any) => <li className="text-ink-2" {...props} />,
+          /**
+           * 渲染加粗文本
+           */
+          strong: ({ node, ...props }: any) => <strong className="font-semibold text-ink" {...props} />,
+          /**
+           * 渲染斜体文本
+           */
+          em: ({ node, ...props }: any) => <em className="italic text-ink-2" {...props} />,
+          /**
+           * 渲染引用块
+           */
+          blockquote: ({ node, ...props }: any) => (
+            <blockquote className="my-3 border-l-4 border-accent bg-accent-bg/30 px-4 py-2 text-ink-2 italic rounded-r-lg" {...props} />
+          ),
+          /**
+           * 渲染代码块与行内代码
+           */
+          code: ({ node, className, ...props }: any) => {
+            const match = /language-(\w+)/.exec(className || '')
+            return match ? (
+              <code className={className} {...props} />
+            ) : (
+              <code className="rounded bg-bg-2 px-1.5 py-0.5 font-mono text-[11.5px] font-medium text-accent" {...props} />
+            )
+          },
+          /**
+           * 渲染预格式化文本（用于包裹多行代码块）
+           */
+          pre: ({ node, ...props }: any) => (
+            <pre className="my-3 overflow-x-auto rounded-xl bg-ink p-4 font-mono text-[12px] text-white shadow-sm" {...props} />
+          ),
+        }}
+      >
+        {content}
+      </ReactMarkdown>
+    </div>
+  )
+}
+
 /** Narrative 单个卡片：左侧色条 + 图标 + 标题 + 正文（可折叠） */
 function NarrativeCard({
   eyebrow,
@@ -2210,11 +2356,17 @@ function NarrativeCard({
   icon,
   delay,
 }: {
+  /** 顶部小标题（通常是英文大写或分类） */
   eyebrow: string
+  /** 卡片主要标题 */
   title: string
+  /** 卡片正文，支持 Markdown 格式 */
   body: string
+  /** 色彩倾向，决定卡片的边框、背景等样式 */
   tone: Tone
+  /** 装饰图标 */
   icon: ReactNode
+  /** 动画延迟时间（秒） */
   delay: number
 }) {
   const palette: Record<Tone, { ring: string; bg: string; text: string }> = {
@@ -2226,8 +2378,8 @@ function NarrativeCard({
   }
   const p = palette[tone]
   const text = body || '—'
-  /** 是否需要折叠（粗略按字符数） */
-  const longText = text.length > 140
+  /** 是否需要折叠（粗略按字符数，包含 Markdown 语法的字符串可能较长） */
+  const longText = text.length > 250
 
   return (
     <article
@@ -2247,13 +2399,15 @@ function NarrativeCard({
       <h4 className={`mt-3 text-base font-semibold tracking-tight ${p.text}`}>
         {title}
       </h4>
-      {longText ? (
-        <Collapsible collapsedHeight={88} expandLabel="展开查看更多" collapseLabel="收起">
-          <p className="mt-2 text-[13.5px] leading-[1.7] text-ink-2">{text}</p>
-        </Collapsible>
-      ) : (
-        <p className="mt-2 text-[13.5px] leading-[1.7] text-ink-2">{text}</p>
-      )}
+      <div className="mt-3">
+        {longText ? (
+          <Collapsible collapsedHeight={180} expandLabel="展开查看详情" collapseLabel="收起详情">
+            <MarkdownRenderer content={text} />
+          </Collapsible>
+        ) : (
+          <MarkdownRenderer content={text} />
+        )}
+      </div>
     </article>
   )
 }
