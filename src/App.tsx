@@ -90,9 +90,9 @@ interface AnalysisFull {
     current_price: number | null
     risk_reward_ratio: number | null
     position_size_pct: number | null
-    lifecycle_status: string | null
-    lifecycle_status_label: string
-    pnl_pct: number | null
+    lifecycle_status?: string | null
+    lifecycle_status_label?: string
+    pnl_pct?: number | null
     headline: string
   }
 
@@ -142,12 +142,12 @@ interface AnalysisFull {
     }
   }
 
-  rule_engine: {
+  rule_engine?: {
     rule_score: number | null
     top_contributions: RuleContribution[]
   }
 
-  lifecycle: {
+  lifecycle?: {
     status: string | null
     status_label: string
     status_color: LifecycleColor
@@ -458,13 +458,17 @@ function App() {
               <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
                 <div className="flex flex-col gap-6 xl:col-span-7">
                   <TradingPlanCard data={current} />
-                  <AttributionList data={current.rule_engine} />
+                  {current.rule_engine && (
+                    <AttributionList data={current.rule_engine} />
+                  )}
                 </div>
                 <div className="flex flex-col gap-6 xl:col-span-5">
-                  <LifecyclePanel
-                    data={current.lifecycle}
-                    bias={current.decision.bias}
-                  />
+                  {current.lifecycle && (
+                    <LifecyclePanel
+                      data={current.lifecycle}
+                      bias={current.decision.bias}
+                    />
+                  )}
                   <MarketContextCard
                     liquidity={current.market_context.liquidity}
                     mtf={current.market_context.mtf_alignment}
@@ -1289,21 +1293,31 @@ function DecisionHero({ data }: { data: AnalysisFull }) {
               hint="占可用资金"
             />
             <Stat
-              label="规则评分"
-              value={fmtNum(data.rule_engine.rule_score ?? null, 3)}
+              label="周期共振度"
+              value={fmtNum(
+                data.market_context?.mtf_alignment?.alignment_score ?? null,
+                2,
+              )}
               tone={
-                (data.rule_engine.rule_score ?? 0) > 0
+                (data.market_context?.mtf_alignment?.alignment_score ?? 0) > 0
                   ? 'text-long'
-                  : (data.rule_engine.rule_score ?? 0) < 0
+                  : (data.market_context?.mtf_alignment?.alignment_score ?? 0) <
+                      0
                     ? 'text-short'
                     : 'text-ink'
               }
               hint={
-                (data.rule_engine.rule_score ?? 0) > 0
-                  ? '看多倾向'
-                  : (data.rule_engine.rule_score ?? 0) < 0
-                    ? '看空倾向'
-                    : '中性'
+                <Tooltip content="多周期方向一致性，范围 -1 ~ +1。正数=做多共振，负数=做空共振">
+                  <span className="cursor-help underline decoration-dotted">
+                    {(() => {
+                      const s =
+                        data.market_context?.mtf_alignment?.alignment_score ?? 0
+                      if (s > 0.3) return '做多共振'
+                      if (s < -0.3) return '做空共振'
+                      return '分歧'
+                    })()}
+                  </span>
+                </Tooltip>
               }
             />
           </div>
@@ -1753,7 +1767,7 @@ function LifecyclePanel({
   data,
   bias,
 }: {
-  data: AnalysisFull['lifecycle']
+  data: NonNullable<AnalysisFull['lifecycle']>
   bias: string
 }) {
   const cls = lifecyclePalette(data.status_color)
@@ -1878,7 +1892,11 @@ function TimelineRow({
  * - 排序按钮（影响力降序 / 升序 / 仅正贡献 / 仅负贡献）
  * - 进度条 + 正负分色
  */
-function AttributionList({ data }: { data: AnalysisFull['rule_engine'] }) {
+function AttributionList({
+  data,
+}: {
+  data: NonNullable<AnalysisFull['rule_engine']>
+}) {
   type SortMode = 'impact' | 'positive' | 'negative'
   const [group, setGroup] = useState<string>('all')
   const [sort, setSort] = useState<SortMode>('impact')
@@ -2522,9 +2540,11 @@ function HistoryList({
                           <div className={`text-lg font-bold ${palette.text}`}>
                             {it.summary.bias_label}
                           </div>
-                          <Badge tone={tone} variant="soft" size="xs">
-                            {it.summary.lifecycle_status_label}
-                          </Badge>
+                          {it.summary.lifecycle_status_label && (
+                            <Badge tone={tone} variant="soft" size="xs">
+                              {it.summary.lifecycle_status_label}
+                            </Badge>
+                          )}
                         </div>
                         <div className="flex items-end justify-between">
                           <div className="font-mono text-[13px] font-medium tabular text-ink">
@@ -2534,15 +2554,17 @@ function HistoryList({
                             <Badge tone="muted" variant="outline" size="xs">
                               RR {fmtNum(it.summary.risk_reward_ratio ?? null, 2)}
                             </Badge>
-                            <Badge
-                              tone={
-                                (pnl ?? 0) > 0 ? 'long' : (pnl ?? 0) < 0 ? 'short' : 'muted'
-                              }
-                              variant="soft"
-                              size="xs"
-                            >
-                              PnL {fmtPct(pnl, 1)}
-                            </Badge>
+                            {pnl !== null && pnl !== undefined && (
+                              <Badge
+                                tone={
+                                  pnl > 0 ? 'long' : pnl < 0 ? 'short' : 'muted'
+                                }
+                                variant="soft"
+                                size="xs"
+                              >
+                                PnL {fmtPct(pnl, 1)}
+                              </Badge>
+                            )}
                           </div>
                         </div>
                       </button>
